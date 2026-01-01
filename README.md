@@ -1,110 +1,92 @@
-# create_agent の response_format 動作検証
+# Create Agent Investigations
 
-LangChain v1 の `create_agent` において、`response_format` 引数がエージェントの動作に与える影響を検証するプログラムです。
+LangChain v1 の `create_agent` における `response_format` 引数の動作を検証し、構造化出力がエージェントの振る舞いに与える影響を調査するプロジェクトです。
 
-## 📄 検証した主張
+## 🎯 プロジェクトの概要
+
+このプロジェクトでは、以下の主張を検証します：
 
 > **「response_format を指定してエビデンスフィールド（validation_result）を含むスキーマを設定すると、LLM が validate 関連のツールを積極的に呼び出すようになる」**
 
-出典: [create_agentのレスポンスフォーマットを使う場合の影響.md](./create_agentのレスポンスフォーマットを使う場合の影響.md)
+## 🔬 検証結果
 
-## 🧪 検証方法
+詳細な検証方法、結果、および技術的洞察については [investigation.md](./investigation.md) をご覧ください。
 
-1. **検証を指示しないタスク**で4つの方式を比較
-   - `no_format`: response_format なし (ReAct パターン)
-   - `tool_strategy`: ToolStrategy (スキーマをツールとして登録)
-   - `provider_strategy`: ProviderStrategy (OpenAI native JSON mode) ★明示的に指定
-   - `auto_strategy`: AutoStrategy (自動選択)
+## 🚀 クイックスタート
 
-2. **validation_result フィールドの有無**で比較
-   - `CalculationResult`: validation_result フィールドあり
-   - `SimpleCalculationResult`: validation_result フィールドなし
+### 前提条件
 
-3. **validate_calculation の呼び出し回数**を記録（各テスト3回実行）
+- Python 3.13+
+- OpenAI API キー
 
-## 📊 検証結果
-
-### テストケース1: 検証指示なし + validation_result フィールドあり
-
-```
-タスク: "15 × 3 を計算してください。"
-
-no_format         : [0, 0, 0] 平均=0.0回
-tool_strategy     : [0, 0, 0] 平均=0.0回
-provider_strategy : [1, 1, 1] 平均=1.0回 ✅
-auto_strategy     : [1, 1, 1] 平均=1.0回 ✅
-```
-
-### テストケース3: 検証指示なし + validation_result フィールドなし
-
-```
-タスク: "15 × 3 を計算してください。"
-スキーマ: SimpleCalculationResult
-
-tool_strategy     : [0, 0, 0] 平均=0.0回
-provider_strategy : [0, 0, 0] 平均=0.0回
-auto_strategy     : [0, 0, 0] 平均=0.0回
-```
-
-## 🎯 結論
-
-### ✅ 記事の主張は **ProviderStrategy において完全に確認できた**
-
-**重要な発見**: ProviderStrategy を**明示的に指定**した場合と AutoStrategy で自動選択された場合の両方で、同じ挙動が確認されました。
-
-1. **response_format の影響**
-   - `no_format`: validate 呼び出し 0回
-   - `tool_strategy`: validate 呼び出し 0回
-   - `provider_strategy`: validate 呼び出し 1回 ✅
-   - `auto_strategy`: validate 呼び出し 1回 ✅
-   - → **ProviderStrategy は validation_result フィールドを埋めるために validate ツールを呼ぶ**
-
-2. **validation_result フィールドの影響**
-   - `provider_strategy` (validation_result あり): 1回
-   - `provider_strategy` (validation_result なし): 0回
-   - → **スキーマに validation_result フィールドがあると、LLM はそれを埋めるために validate ツールを呼ぶ**
-
-3. **ToolStrategy では同様の傾向は見られなかった**
-   - これは ToolStrategy と ProviderStrategy の内部実装の違いによるもの
-
-## 🔍 技術的な洞察
-
-### AutoStrategy の挙動
-
-**gpt-4o-mini では AutoStrategy は ProviderStrategy を選択**
-- `_supports_provider_strategy()` が `True` を返すため
-- FALLBACK_MODELS_WITH_STRUCTURED_OUTPUT に "gpt-4o" が含まれる
-- 実際に検証した結果、すべての実行で ProviderStrategy が選択された
-
-### ProviderStrategy vs ToolStrategy の違い
-
-- **ToolStrategy**: スキーマを「ツール」として登録し、`tool_choice="required"` を強制
-  - LLM は明示的にツール呼び出しの形式でスキーマを呼ぶ
-  - Optional フィールド（`validation_result: dict | None`）は必ずしも埋めなくて良い
-  - 検証では validate ツールを呼ばなかった（0回）
-
-- **ProviderStrategy**: OpenAI の native JSON mode (structured outputs) を使用
-  - LLM はスキーマに厳密に準拠した JSON を生成しようとする
-  - Optional でもフィールドが定義されていると、値を埋めようとする傾向が強い
-  - そのため `validation_result` を埋めるために `validate_calculation` ツールを呼ぶ（1回）
-  - これが記事で述べられていた「validate ツールを積極的に呼ぶ」挙動の正体
-
-## 🚀 実行方法
+### インストール & 実行
 
 ```bash
+# リポジトリをクローン
+git clone https://github.com/aRaikoFunakami/create_agent_investigations.git
+cd create_agent_investigations
+
+# 依存関係をインストール (uv を使用)
+uv sync
+
+# OpenAI API キーを設定
 export OPENAI_API_KEY="your-api-key"
+
+# 検証プログラムを実行
 uv run python main.py
 ```
 
-## 📦 依存関係
+### pipenv を使用する場合
 
-- Python 3.13+
-- langchain >= 1.2.0
-- langchain-openai >= 1.1.6
-- openai >= 2.14.0
+```bash
+pip install pipenv
+pipenv install
+pipenv shell
+python main.py
+```
 
-## 📝 ファイル構成
+## 📦 主要な依存関係
 
-- `main.py`: 検証プログラム本体
-- `create_agentのレスポンスフォーマットを使う場合の影響.md`: 検証対象の記事
-- `README.md`: このファイル
+| パッケージ | バージョン | 用途 |
+|------------|------------|------|
+| `langchain` | >= 1.2.0 | LangChain エージェントフレームワーク |
+| `langchain-openai` | >= 1.1.6 | OpenAI LLM インテグレーション |
+| `openai` | >= 2.14.0 | OpenAI API クライアント |
+| `pydantic` | >= 2.0.0 | データ検証とスキーマ定義 |
+
+## 📁 プロジェクト構成
+
+```
+create_agent_investigations/
+├── README.md                           # このファイル
+├── pyproject.toml                      # プロジェクト設定とパッケージ管理
+├── main.py                            # 🔬 メイン検証プログラム
+├── util.py                            # 🛠️  ユーティリティ関数
+├── debug_api.py                       # 🐛 デバッグ用APIクライアント
+├── investigation.md                    # 📋 調査プロセスの記録
+└── create_agentのレスポンスフォーマットを使う場合の影響.md  # 📄 検証対象記事
+```
+
+## 🤝 コントリビューション
+
+このプロジェクトは研究目的で作成されていますが、改善提案や追加検証のアイデアは歓迎します：
+
+1. Fork このリポジトリ
+2. Feature ブランチを作成 (`git checkout -b feature/amazing-feature`)
+3. 変更をコミット (`git commit -m 'Add some amazing feature'`)
+4. ブランチにプッシュ (`git push origin feature/amazing-feature`)
+5. Pull Request を作成
+
+## 📊 研究データ
+
+すべての実験データは [investigation.md](./investigation.md) で詳細に記録されています。
+
+## ⚠️ 注意事項
+
+- このプロジェクトは研究・教育目的で作成されています
+- OpenAI API の使用にはコストが発生します
+- API レート制限にご注意ください
+
+## 📄 ライセンス
+
+MIT License - 詳細は [LICENSE](LICENSE) ファイルをご覧ください。
